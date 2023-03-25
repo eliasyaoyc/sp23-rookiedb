@@ -107,7 +107,7 @@ class InnerNode extends BPlusNode {
             int index = numLessThanEqual(key, this.keys);
 
             Optional<Pair<DataBox, Long>> pair = this.getChild(index).put(key, rid);
-            if (!pair.isPresent()) {
+            if (pair.isEmpty()) {
                 return Optional.empty();
             }
 

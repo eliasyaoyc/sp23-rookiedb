@@ -183,7 +183,6 @@ class LeafNode extends BPlusNode {
             while (d < this.keys.size()) {
                 newKeys.add(this.keys.remove(d));
                 newRids.add(this.rids.remove(d));
-                d++;
             }
             LeafNode rightNode = new LeafNode(metadata, bufferManager, newKeys, newRids, this.rightSibling,
                     treeContext);
