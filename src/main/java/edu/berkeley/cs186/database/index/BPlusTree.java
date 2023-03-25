@@ -7,7 +7,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 
 import edu.berkeley.cs186.database.TransactionContext;
@@ -212,9 +211,7 @@ public class BPlusTree {
         // TODO(proj4_integration): Update the following line
         LockUtil.ensureSufficientLockHeld(lockContext, LockType.NL);
 
-        // TODO(proj2): Return a BPlusTreeIterator.
-
-        return Collections.emptyIterator();
+        return new BPlusTreeIterator();
     }
 
     /**
@@ -245,9 +242,8 @@ public class BPlusTree {
         // TODO(proj4_integration): Update the following line
         LockUtil.ensureSufficientLockHeld(lockContext, LockType.NL);
 
-        // TODO(proj2): Return a BPlusTreeIterator.
-
-        return Collections.emptyIterator();
+        LeafNode leafNode = this.root.get(key);
+        return new BPlusTreeIterator(leafNode, leafNode.scanGreaterEqual(key));
     }
 
     /**
@@ -441,20 +437,32 @@ public class BPlusTree {
 
     // Iterator ////////////////////////////////////////////////////////////////
     private class BPlusTreeIterator implements Iterator<RecordId> {
-        // TODO(proj2): Add whatever fields and constructors you want here.
+        private LeafNode leaf;
+        private Iterator<RecordId> iter;
+
+        public BPlusTreeIterator() {
+            this(root.getLeftmostLeaf(), null);
+        }
+
+        public BPlusTreeIterator(LeafNode leaf, Iterator<RecordId> iter) {
+            this.leaf = leaf;
+            this.iter = iter == null ? leaf.scanAll() : iter;
+        }
 
         @Override
         public boolean hasNext() {
-            // TODO(proj2): implement
-
-            return false;
+            return iter.hasNext() || leaf.getRightSibling().isPresent();
         }
 
         @Override
         public RecordId next() {
-            // TODO(proj2): implement
-
-            throw new NoSuchElementException();
+            if (this.iter.hasNext()) {
+                return iter.next();
+            } else {
+                leaf = leaf.getRightSibling().get();
+                iter = leaf.scanAll();
+                return next();
+            }
         }
     }
 }
