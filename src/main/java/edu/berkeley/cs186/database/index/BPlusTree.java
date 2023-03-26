@@ -299,11 +299,21 @@ public class BPlusTree {
         // TODO(proj4_integration): Update the following line
         LockUtil.ensureSufficientLockHeld(lockContext, LockType.NL);
 
-        // TODO(proj2): implement
         // Note: You should NOT update the root variable directly.
         // Use the provided updateRoot() helper method to change
         // the tree's root if the old root splits.
-
+        while (data.hasNext()) {
+            Optional<Pair<DataBox, Long>> pair = this.root.bulkLoad(data, fillFactor);
+            if (pair.isPresent()) {
+                List<DataBox> newKeys = new ArrayList<>();
+                List<Long> newChildrens = new ArrayList<>();
+                newKeys.add(pair.get().getFirst());
+                newChildrens.add(this.root.getPage().getPageNum());
+                newChildrens.add(pair.get().getSecond());
+                InnerNode innerNode = new InnerNode(metadata, bufferManager, newKeys, newChildrens, lockContext);
+                this.updateRoot(innerNode);
+            }
+        }
         return;
     }
 

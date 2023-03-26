@@ -119,7 +119,7 @@ class InnerNode extends BPlusNode {
             this.keys.add(splitpoint, splitKey);
             this.children.add(splitpoint + 1, rightNodePageNum);
 
-            if (this.keys.size() <= 2 * d) {
+            if (this.keys.size() < 2 * d + 1) {
                 return Optional.empty();
             }
 
@@ -144,9 +144,38 @@ class InnerNode extends BPlusNode {
     @Override
     public Optional<Pair<DataBox, Long>> bulkLoad(Iterator<Pair<DataBox, RecordId>> data,
             float fillFactor) {
-        // TODO(proj2): implement
+        try {
+            int d = this.metadata.getOrder();
+            int limit = d * 2 + 1;
+            Optional<Pair<DataBox, Long>> pair;
+            while (data.hasNext() && this.keys.size() < limit) {
+                BPlusNode rightMostChild = this.getChild(this.children.size() - 1);
+                pair = rightMostChild.bulkLoad(data, fillFactor);
+                if (pair.isPresent()) {
+                    keys.add(pair.get().getFirst());
+                    children.add(pair.get().getSecond());
+                }
+            }
+            if (this.keys.size() < limit) {
+                return Optional.empty();
+            }
 
-        return Optional.empty();
+            List<DataBox> newKeys = new ArrayList<>();
+            List<Long> newChildren = new ArrayList<>();
+            newChildren.add(children.remove(d + 1));
+            while (d + 1 < this.keys.size()) {
+                newKeys.add(this.keys.remove(d + 1));
+                newChildren.add(this.children.remove(d + 1));
+            }
+
+            DataBox newSplitKey = this.keys.remove(d);
+            InnerNode rightInnerNode = new InnerNode(metadata, bufferManager, newKeys, newChildren, treeContext);
+            long rightInnerNodePageNum = rightInnerNode.getPage().getPageNum();
+
+            return Optional.of(new Pair<>(newSplitKey, rightInnerNodePageNum));
+        } finally {
+            sync();
+        }
     }
 
     // See BPlusNode.remove.
