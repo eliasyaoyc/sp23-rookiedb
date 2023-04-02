@@ -1,13 +1,13 @@
 package edu.berkeley.cs186.database.query.join;
 
+import java.util.Iterator;
+import java.util.NoSuchElementException;
+
 import edu.berkeley.cs186.database.TransactionContext;
 import edu.berkeley.cs186.database.common.iterator.BacktrackingIterator;
 import edu.berkeley.cs186.database.query.JoinOperator;
 import edu.berkeley.cs186.database.query.QueryOperator;
 import edu.berkeley.cs186.database.table.Record;
-
-import java.util.Iterator;
-import java.util.NoSuchElementException;
 
 /**
  * Performs an equijoin between two relations on leftColumnName and
@@ -17,13 +17,12 @@ public class BNLJOperator extends JoinOperator {
     protected int numBuffers;
 
     public BNLJOperator(QueryOperator leftSource,
-                        QueryOperator rightSource,
-                        String leftColumnName,
-                        String rightColumnName,
-                        TransactionContext transaction) {
+            QueryOperator rightSource,
+            String leftColumnName,
+            String rightColumnName,
+            TransactionContext transaction) {
         super(leftSource, materialize(rightSource, transaction),
-                leftColumnName, rightColumnName, transaction, JoinType.BNLJ
-        );
+                leftColumnName, rightColumnName, transaction, JoinType.BNLJ);
         this.numBuffers = transaction.getWorkMemSize();
         this.stats = this.estimateStats();
     }
@@ -35,12 +34,12 @@ public class BNLJOperator extends JoinOperator {
 
     @Override
     public int estimateIOCost() {
-        //This method implements the IO cost estimation of the Block Nested Loop Join
+        // This method implements the IO cost estimation of the Block Nested Loop Join
         int usableBuffers = numBuffers - 2;
         int numLeftPages = getLeftSource().estimateStats().getNumPages();
         int numRightPages = getRightSource().estimateIOCost();
         return ((int) Math.ceil((double) numLeftPages / (double) usableBuffers)) * numRightPages +
-               getLeftSource().estimateIOCost();
+                getLeftSource().estimateIOCost();
     }
 
     /**
@@ -48,7 +47,7 @@ public class BNLJOperator extends JoinOperator {
      * Look over the implementation in SNLJOperator if you want to get a feel
      * for the fetchNextRecord() logic.
      */
-    private class BNLJIterator implements Iterator<Record>{
+    private class BNLJIterator implements Iterator<Record> {
         // Iterator over all the records of the left source
         private Iterator<Record> leftSourceIterator;
         // Iterator over all the records of the right source
@@ -87,7 +86,14 @@ public class BNLJOperator extends JoinOperator {
          * Make sure you pass in the correct schema to this method.
          */
         private void fetchNextLeftBlock() {
-            // TODO(proj3_part1): implement
+            BacktrackingIterator<Record> leftBlockIterator = getBlockIterator(this.leftSourceIterator,
+                    getLeftSource().getSchema(),
+                    numBuffers - 2);
+            if (leftBlockIterator.hasNext()) {
+                leftBlockIterator.markNext();
+                this.leftBlockIterator = leftBlockIterator;
+                this.leftRecord = leftBlockIterator.next();
+            }
         }
 
         /**
@@ -102,7 +108,11 @@ public class BNLJOperator extends JoinOperator {
          * Make sure you pass in the correct schema to this method.
          */
         private void fetchNextRightPage() {
-            // TODO(proj3_part1): implement
+            BacktrackingIterator<Record> rightRightIterator = getBlockIterator(this.rightSourceIterator,
+                    getRightSource().getSchema(),
+                    1);
+            rightRightIterator.markNext();
+            this.rightPageIterator = rightRightIterator;
         }
 
         /**
@@ -114,17 +124,48 @@ public class BNLJOperator extends JoinOperator {
          * of JoinOperator).
          */
         private Record fetchNextRecord() {
-            // TODO(proj3_part1): implement
-            return null;
+            while (true) {
+                if (this.leftRecord == null) {
+                    return null;
+                }
+                // case1. leftRecord is exist, so needs to fetch rightRecord then compare and concat.
+                if (this.rightPageIterator.hasNext()) {
+                    nextRecord = rightPageIterator.next();
+                    if (compare(leftRecord, nextRecord) == 0) {
+                        return leftRecord.concat(nextRecord);
+                    }
+                // case2. rightRecord is null, check left and reset right if exist.
+                } else if (this.leftBlockIterator.hasNext()) {
+                    leftRecord = this.leftBlockIterator.next();
+                    rightPageIterator.reset();
+                // case3. leftIter is empty, reset left if exist   
+                } else if (this.rightSourceIterator.hasNext()) {
+                    leftBlockIterator.reset();
+                    if (leftBlockIterator.hasNext()) {
+                        leftRecord = leftBlockIterator.next();
+                    }else {
+                        leftRecord = null;
+                    }
+                    fetchNextRightPage();
+                // case4. rightSource is empty, check left and reset right if exist.    
+                } else if (leftSourceIterator.hasNext()) {
+                    fetchNextLeftBlock();
+                    rightSourceIterator.reset();
+                    fetchNextRightPage();
+                } else {
+                    return null;
+                }
+            }
         }
 
         /**
          * @return true if this iterator has another record to yield, otherwise
-         * false
+         *         false
          */
         @Override
         public boolean hasNext() {
-            if (this.nextRecord == null) this.nextRecord = fetchNextRecord();
+            if (this.nextRecord == null)
+                this.nextRecord = fetchNextRecord();
             return this.nextRecord != null;
         }
 
@@ -134,7 +175,8 @@ public class BNLJOperator extends JoinOperator {
          */
         @Override
         public Record next() {
-            if (!this.hasNext()) throw new NoSuchElementException();
+            if (!this.hasNext())
+                throw new NoSuchElementException();
             Record nextRecord = this.nextRecord;
             this.nextRecord = null;
             return nextRecord;

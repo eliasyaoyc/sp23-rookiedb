@@ -8,12 +8,12 @@ import edu.berkeley.cs186.database.table.stats.TableStats;
 
 public abstract class JoinOperator extends QueryOperator {
     public enum JoinType {
-        SNLJ,
-        PNLJ,
-        BNLJ,
+        SNLJ,       // simple nested-loop join 
+        PNLJ,       // page nested-loop join 
+        BNLJ,       // block nested-loop join
         SORTMERGE,
-        SHJ,
-        GHJ
+        SHJ,        // simple hash join
+        GHJ         // grace hash  join
     }
     protected JoinType joinType;
 
