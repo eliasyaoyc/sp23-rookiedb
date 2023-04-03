@@ -94,12 +94,12 @@ public class SortOperator extends QueryOperator {
      *         iterator
      */
     public Run sortRun(Iterator<Record> records) {
-        List<Record> listRecords = new ArrayList<>();
+        List<Record> ret = new ArrayList<Record>();
         while (records.hasNext()) {
-            listRecords.add(records.next());
+            ret.add(records.next());
         }
-        Collections.sort(listRecords, this.comparator);
-        return makeRun(listRecords);
+        Collections.sort(ret, new RecordComparator());
+        return makeRun(ret);
     }
 
     /**
@@ -120,19 +120,20 @@ public class SortOperator extends QueryOperator {
      */
     public Run mergeSortedRuns(List<Run> runs) {
         assert (runs.size() <= this.numBuffers - 1);
-        Run combineRun = makeRun();
-        PriorityQueue<Pair<Record, Integer>> nextRecord = new PriorityQueue<>(runs.size(),
+
+        List<Record> ret = new ArrayList<Record>();
+        PriorityQueue<Pair<Record, Integer>> priorityQueue = new PriorityQueue<Pair<Record, Integer>>(
                 new RecordPairComparator());
         for (int i = 0; i < runs.size(); i++) {
-            BacktrackingIterator<Record> bi = runs.get(i).iterator();
-            while (bi.hasNext()) {
-                nextRecord.add(new Pair<>(bi.next(), i));
+            BacktrackingIterator<Record> iterator = runs.get(i).iterator();
+            while (iterator.hasNext()) {
+                priorityQueue.add(new Pair<Record, Integer>(iterator.next(), i));
             }
         }
-        while (!nextRecord.isEmpty()) {
-            combineRun.add(nextRecord.poll().getFirst());
+        while (!priorityQueue.isEmpty()) {
+            ret.add(priorityQueue.poll().getFirst());
         }
-        return combineRun;
+        return makeRun(ret);
     }
 
     /**
@@ -156,12 +157,12 @@ public class SortOperator extends QueryOperator {
      * @return a list of sorted runs obtained by merging the input runs
      */
     public List<Run> mergePass(List<Run> runs) {
-        List<Run> result = new ArrayList<>();
-        int stepSize = numBuffers - 1;
-        for (int i = 0; i < runs.size(); i += stepSize) {
-            result.add(mergeSortedRuns(runs.subList(i, i + stepSize)));
+        List<Run> ret = new ArrayList<>();
+        for (int i = 0; i < runs.size(); i += (numBuffers - 1)) {
+            Run sortedRuns = this.mergeSortedRuns(runs.subList(i, i + numBuffers - 1));
+            ret.add(sortedRuns);
         }
-        return result;
+        return ret;
     }
 
     /**
@@ -175,7 +176,7 @@ public class SortOperator extends QueryOperator {
     public Run sort() {
         // Iterator over the records of the relation we want to sort
         Iterator<Record> sourceIterator = getSource().iterator();
-
+        
         List<Run> runs = new ArrayList<Run>();
         while (sourceIterator.hasNext()) {
             BacktrackingIterator<Record> bi = getBlockIterator(sourceIterator, outputSchema, numBuffers);
