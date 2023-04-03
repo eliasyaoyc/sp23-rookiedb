@@ -3,6 +3,7 @@ package edu.berkeley.cs186.database.query;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -653,7 +654,6 @@ public class QueryPlan {
             Map<Set<String>, QueryOperator> prevMap,
             Map<Set<String>, QueryOperator> pass1Map) {
         Map<Set<String>, QueryOperator> result = new HashMap<>();
-        // TODO(proj3_part2): implement
         // We provide a basic description of the logic you have to implement:
         // For each set of tables in prevMap
         // For each join predicate listed in this.joinPredicates
@@ -669,6 +669,34 @@ public class QueryPlan {
         // calculate the cheapest join with the new table (the one you
         // fetched an operator for from pass1Map) and the previously joined
         // tables. Then, update the result map if needed.
+        for (Map.Entry<Set<String>, QueryOperator> s : prevMap.entrySet()) {
+            for (JoinPredicate js : joinPredicates) {
+                QueryOperator leftOp;
+                QueryOperator rightOp;
+                if (s.getKey().contains(js.leftTable) && !s.getKey().contains(js.rightTable)) {
+                    HashSet<String> newSet = new HashSet<>();
+                    newSet.add(js.rightTable);
+                    rightOp = pass1Map.get(newSet);
+                    leftOp = s.getValue();
+                    QueryOperator bestOp = minCostJoinType(leftOp, rightOp, js.leftColumn, js.rightColumn);
+                    Set<String> updatedTables = new HashSet<>(s.getKey());
+                    updatedTables.add(js.rightTable);
+                    result.put(updatedTables, bestOp);
+                } else if (!s.getKey().contains(js.leftTable) && s.getKey().contains(js.rightTable)) {
+                    HashSet<String> newSet = new HashSet<>();
+                    newSet.add(js.leftTable);
+                    leftOp = pass1Map.get(newSet);
+                    rightOp = s.getValue();
+                    QueryOperator bestOp = minCostJoinType(leftOp, rightOp, js.leftColumn, js.rightColumn);
+                    Set<String> updatedTables = new HashSet<>(s.getKey());
+                    updatedTables.add(js.leftTable);
+                    result.put(updatedTables, bestOp);
+                } else {
+                    continue;
+                }
+            }
+
+        }
         return result;
     }
 
@@ -706,7 +734,7 @@ public class QueryPlan {
      */
     public Iterator<Record> execute() {
         this.transaction.setAliasMap(this.aliases);
-        // TODO(proj3_part2): implement
+
         // Pass 1: For each table, find the lowest cost QueryOperator to access
         // the table. Construct a mapping of each table name to its lowest cost
         // operator.
@@ -718,7 +746,24 @@ public class QueryPlan {
         // Set the final operator to the lowest cost operator from the last
         // pass, add group by, project, sort and limit operators, and return an
         // iterator over the final operator.
-        return this.executeNaive(); // TODO(proj3_part2): Replace this!
+        Map<Set<String>, QueryOperator> mapPassOne = new HashMap<>();
+        for (String tableName : tableNames) {
+            QueryOperator bestOp = minCostSingleAccess(tableName);
+            Set<String> newTables = new HashSet<>();
+            newTables.add(tableName);
+            mapPassOne.put(newTables, bestOp);
+        }
+        Map<Set<String>, QueryOperator> prevPass = mapPassOne;
+        for (int i = 2; i <= tableNames.size(); i++) {
+            prevPass = minCostJoins(prevPass, mapPassOne);
+        }
+
+        finalOperator = minCostOperator(prevPass);
+        addGroupBy();
+        addProject();
+        addSort();
+        addLimit();
+        return finalOperator.iterator();
     }
 
     // EXECUTE NAIVE ///////////////////////////////////////////////////////////
